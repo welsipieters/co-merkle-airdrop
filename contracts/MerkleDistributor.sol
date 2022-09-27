@@ -36,6 +36,7 @@ contract MerkleDistributor is AccessControl {
     /// ---------- Immutable storage ----------
     bytes32 public constant DISTRIBUTOR_ROLE = keccak256("DISTRIBUTOR_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
 
     /// ---------- Mutable Storage ----------
     Counters.Counter public campaignCount;
@@ -98,7 +99,7 @@ contract MerkleDistributor is AccessControl {
     /// @param _token: The address of the token to withdraw.
     /// @param _to: The recipient of the tokens.
     /// @param _amount: The amount of tokens to withdraw.
-    function withdrawErc20(address _token, address _to, uint256 _amount) external onlyRole(ADMIN_ROLE) {
+    function withdrawErc20(address _token, address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (_amount == 0) {
             _amount = IERC20(_token).balanceOf(address(this));
         }
@@ -111,7 +112,7 @@ contract MerkleDistributor is AccessControl {
     /// @notice External function to withdraw ETH (or any other native currency) on the contract.
     /// @param _to: The recipient of the ETH.
     /// @param _amount: The amount of ETH to withdraw.
-    function withdrawEth(address _to, uint256 _amount) external onlyRole(ADMIN_ROLE) {
+    function withdrawEth(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (_amount == 0) {
             _amount = address(this).balance;
         }
