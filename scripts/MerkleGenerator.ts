@@ -17,27 +17,19 @@ export class Generator {
     recipients: {[address: string]: number} = {};
     tree: MerkleTree;
 
-    constructor(decimals: number, allocation: Record<string, number>) {
-        Object.entries(allocation).map(([address, tokens]) => {
-            this.recipients[address] = tokens;
-        });
+    constructor(allocation: Record<string, number>) {
+        this.recipients = allocation;
 
         console.info("Generating Merkle tree.");
 
         const addresses = Object.keys(allocation);
-        addresses.sort(function(a, b) {
-            const al = a.toLowerCase(), bl = b.toLowerCase();
-            if (al < bl) { return -1; }
-            if (al > bl) { return 1; }
-            return 0;
-        });
 
         this.tree = new MerkleTree(
             addresses.map((address, index) => {
                 return Generator.generateLeafNode(
                     index,
                     address,
-                    parseUnits(allocation[address].toString(), decimals.toString()).toString()
+                    parseUnits(allocation[address].toString(), process.env.decimals).toString()
                 );
             }),
             keccak256,
@@ -72,12 +64,14 @@ export class Generator {
     const configData = fs.readFileSync(allocationPath);
     const config = JSON.parse(configData.toString());
 
-    if (config.allocation == undefined || config.token_decimals == undefined) {
+    if (config === undefined) {
         throwAndExit("Corrupted `allocation.json` file.");
     }
 
-    const decimals: number = config.token_decimals;
-    const allocation: Record<string, number> = config.allocation;
+    const allocations: Record<string, number> = {};
+    config.forEach((allocation: any) => {
+        allocations[allocation.wallet] = allocation.total_co;
+    });
 
-    new Generator(decimals, allocation);
+    new Generator(allocations);
 })();

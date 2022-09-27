@@ -26,14 +26,14 @@ describe("MerkleDistributor", () => {
             allocation[signer.address] = 100;
         })
 
-        generator = new Generator(18, allocation);
+        generator = new Generator(allocation);
         console.log("generator root", generator.tree.getHexRoot())
-
-        distributorContract = await ethers.getContractFactory("MerkleDistributor");
-        Distributor = await distributorContract.connect(deployUser).deploy(generator.tree.getHexRoot());
 
         erc20Contract = await ethers.getContractFactory('TestToken');
         Erc20 = await erc20Contract.connect(deployUser).deploy();
+
+        distributorContract = await ethers.getContractFactory("MerkleDistributor");
+        Distributor = await distributorContract.connect(deployUser).deploy();
 
         await Erc20.transfer(Distributor.address, parseEther("100000"))
 
@@ -59,77 +59,83 @@ describe("MerkleDistributor", () => {
         await Erc20.connect(testUser1).approve(Distributor.address, parseEther("100000000"));
         const tx = Distributor.connect(testUser1).deposit(Erc20.address, parseEther("100"));
 
-        await expect(tx).to.be.revertedWithCustomError(Distributor, 'NoAdminRole');
+        await expect(tx).to.be.reverted;
     });
 
-    it('should be possible to update the claimable token', async () => {
-        const secondToken = await erc20Contract.deploy();
-        
-        await Distributor.connect(deployUser).setClaimable(secondToken.address);
-        expect(await Distributor.claimableToken()).to.equal(secondToken.address);
+    it('should be possible to create a campaign', async () => {
+        const id = Distributor.campaignCount();
+        const tx = await Distributor.connect(deployUser).createCampaign(
+            Erc20.address,
+            parseEther("10000"),
+            1664232160,
+            1764232160,
+            generator.tree.getHexRoot()
+        );
 
+        await tx.wait();
 
-        await Distributor.connect(deployUser).setClaimable(Erc20.address);
-        expect(await Distributor.claimableToken()).to.equal(Erc20.address);
+        const campaign = await Distributor.campaigns(id);
+        expect(campaign[1]).to.be.equal(Erc20.address);
     });
 
-    it('should not be possible to update claimable from non-admin account', async () => {
-        const secondToken = await erc20Contract.deploy();
-        const tx = Distributor.connect(testUser1).setClaimable(secondToken.address);
+    it('should be possible to update a campaign', async () => {
+        const id = Distributor.campaignCount();
+        await Distributor.connect(deployUser).createCampaign(
+            Erc20.address,
+            parseEther("10000"),
+            1664232160,
+            1764232160,
+            generator.tree.getHexRoot()
+        );
 
-        await expect(tx).to.be.revertedWithCustomError(Distributor, 'NoAdminRole');
+
+        await Distributor.connect(deployUser).editCampaign(
+            id,
+            1664232160,
+            1864232160,
+            generator.tree.getHexRoot()
+        )
+
+        const campaign = await Distributor.campaigns(id);
+
+        expect(campaign[4]).to.be.equal(1664232160);
+        expect(campaign[5]).to.be.equal(1864232160);
     });
 
     // at this point im gonna stop testing ACL.
 
-    it('should be possible to update the merkle root', async () => {
-        const allocation: Record<string, number> = {};
-        [testUser1, testUser2, deployUser].forEach((signer) => {
-            allocation[signer.address] = 100;
-        })
-
-        const _generator = new Generator(18, allocation);
-
-        const realRoot = await Distributor.merkleRoot();
-        expect(realRoot).not.to.be.equal(_generator.tree.getHexRoot());
-
-        await Distributor.connect(deployUser).setMerkleRoot(_generator.tree.getHexRoot());
-        expect(await Distributor.merkleRoot()).to.be.equal(_generator.tree.getHexRoot());
-
-        await Distributor.connect(deployUser).setMerkleRoot(realRoot);
-        expect(await Distributor.merkleRoot()).to.be.equal(realRoot);
-    });
-
     it('should be possible to see if a user claimed already', async () => {
-        expect(await Distributor.connect(testUser1).hasClaimed(1)).to.be.false;
+        expect(await Distributor.connect(testUser1).hasClaimed(0, 0)).to.be.false;
     });
 
     it('should be possible to claim', async () => {
-        const leaf = Generator.generateLeafNode(1, testUser1.address, parseEther('100').toString());
+        const leaf = Generator.generateLeafNode(0, testUser1.address, parseEther('100').toString());
         const proof = generator.tree.getHexProof(leaf);
 
+        console.log(generator.tree.getHexRoot());
         const beforeBalance = await Erc20.balanceOf(testUser1.address);
-        await Distributor.connect(testUser1).claim(1, parseEther('100'), proof);
+        await Distributor.connect(testUser1).claim(0, 0, parseEther('100'), proof);
         const afterBalance = await Erc20.balanceOf(testUser1.address);
 
         expect(afterBalance).to.be.equal(beforeBalance.add(parseEther("100")));
-        expect(await Distributor.connect(testUser1).hasClaimed(1)).to.be.true;
+        console.log("await Distributor.connect(testUser1).hasClaimed(0, 1)", await Distributor.connect(testUser1).hasClaimed(0, 0))
+        expect(await Distributor.connect(testUser1).hasClaimed(0, 0)).to.be.true;
     });
 
     it('should not be possible to claim twice', async () => {
-        const leaf = Generator.generateLeafNode(1, testUser1.address, parseEther('100').toString());
+        const leaf = Generator.generateLeafNode(0, testUser1.address, parseEther('100').toString());
         const proof = generator.tree.getHexProof(leaf);
 
-        const tx = Distributor.connect(testUser1).claim(1, parseEther('100'), proof);
+        const tx = Distributor.connect(testUser1).claim(0, 0, parseEther('100'), proof);
 
         await expect(tx).to.revertedWithCustomError(Distributor, "AlreadyClaimed");
     });
 
     it('should not be possible to claim an incorrect allocation', async () => {
-        const leaf = Generator.generateLeafNode(0, testUser2.address, parseEther('1000').toString());
+        const leaf = Generator.generateLeafNode(1, testUser2.address, parseEther('1000').toString());
         const proof = generator.tree.getHexProof(leaf);
 
-        const tx = Distributor.connect(testUser2).claim(0, parseEther('1000'), proof);
+        const tx = Distributor.connect(testUser2).claim(0, 1, parseEther('1000'), proof);
 
         await expect(tx).to.revertedWithCustomError(Distributor, "IncorrectAllocation");
     });
@@ -149,4 +155,6 @@ describe("MerkleDistributor", () => {
 
         expect(newBalance).to.be.equal(oldBalance.add(parseEther('1.213')));
     });
+
+
 });

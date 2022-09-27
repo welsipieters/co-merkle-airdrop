@@ -1,6 +1,7 @@
-{
-  "token_decimals": 18,
-  "allocation": {
-    "0x0000000000000000000000000000000000000000": 100
+[
+  {
+    "index": 0,
+    "wallet": "0xff92b02b1e0d24598d053b48ed2eb7b98d7e876c",
+    "total_co": 10,
   }
-}
+]
